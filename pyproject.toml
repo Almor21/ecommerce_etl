@@ -1,0 +1,28 @@
+[project]
+name = "ecommerce-etl"
+version = "0.1.0"
+description = "ETL medallion (Bronze/Silver/Gold) para un dataset de e-commerce brasileño"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "duckdb>=1.5.4",
+    "polars>=1.42.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+notebook = ["jupyterlab>=4"]
+
+[project.scripts]
+etl = "ecommerce_etl.pipeline:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ecommerce_etl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
