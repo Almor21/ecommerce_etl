@@ -65,3 +65,34 @@ def test_deduplicate_by_key_keeps_latest_and_returns_removed():
     assert c1["email"].to_list() == ["nuevo@x.com"]
     assert removed.height == 1
     assert removed["email"].to_list() == ["viejo@x.com"]
+
+
+def test_deduplicate_by_key_without_order_keeps_first():
+    """With no order_by, the first row per key is kept and the rest returned."""
+    df = pl.DataFrame({"product_id": ["P1", "P2", "P1"], "price": [10.0, 20.0, 99.0]})
+    kept, removed = T.deduplicate_by_key(df, key="product_id")
+    assert kept.height == 2
+    assert kept.filter(pl.col("product_id") == "P1")["price"].to_list() == [10.0]
+    assert removed["price"].to_list() == [99.0]
+
+
+def test_cast_float_permissive():
+    """Numeric text becomes float; non-numeric text becomes null."""
+    df = pl.DataFrame({"price": ["10.5", "-3", "abc", None]})
+    out = T.cast_float(df, "price")
+    assert out.schema["price"] == pl.Float64
+    assert out["price"].to_list() == [10.5, -3.0, None, None]
+
+
+def test_nullify_outside_range_low_bound():
+    """Values below the low bound become null; valid values and nulls are kept."""
+    df = pl.DataFrame({"price": [10.0, -5.0, 0.0, None]})
+    out = T.nullify_outside_range(df, "price", low=0)
+    assert out["price"].to_list() == [10.0, None, 0.0, None]
+
+
+def test_nullify_outside_range_low_and_high():
+    """Values outside the inclusive [low, high] range become null."""
+    df = pl.DataFrame({"score": [1, 0, 5, 6, 3, None]})
+    out = T.nullify_outside_range(df, "score", low=1, high=5)
+    assert out["score"].to_list() == [1, None, 5, None, 3, None]

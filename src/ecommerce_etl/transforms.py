@@ -40,6 +40,27 @@ def parse_datetime(
     )
 
 
+def cast_float(df: pl.DataFrame, column: str) -> pl.DataFrame:
+    """Cast a text column to float; unparseable values become null."""
+    return df.with_columns(pl.col(column).cast(pl.Float64, strict=False).alias(column))
+
+
+def nullify_outside_range(
+    df: pl.DataFrame,
+    column: str,
+    low: float | None = None,
+    high: float | None = None,
+) -> pl.DataFrame:
+    """Set values outside the inclusive [low, high] range to null (keeps the row)."""
+    col = pl.col(column)
+    out_of_range = pl.lit(False)
+    if low is not None:
+        out_of_range = out_of_range | (col < low)
+    if high is not None:
+        out_of_range = out_of_range | (col > high)
+    return df.with_columns(pl.when(out_of_range).then(None).otherwise(col).alias(column))
+
+
 def drop_null_keys(df: pl.DataFrame, key: str) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Split rows on the primary key: (rows with key, rows missing key)."""
     kept = df.filter(pl.col(key).is_not_null())
@@ -48,11 +69,15 @@ def drop_null_keys(df: pl.DataFrame, key: str) -> tuple[pl.DataFrame, pl.DataFra
 
 
 def deduplicate_by_key(
-    df: pl.DataFrame, key: str, order_by: str, descending: bool = True
+    df: pl.DataFrame, key: str, order_by: str | None = None, descending: bool = True
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Deduplicate by key keeping the latest row; returns (kept, removed)."""
-    ordered = df.with_row_index("__row_id").sort(
-        order_by, descending=descending, nulls_last=True
+    """Deduplicate by key keeping the latest row by `order_by`, or the first row
+    when `order_by` is None; returns (kept, removed)."""
+    indexed = df.with_row_index("__row_id")
+    ordered = (
+        indexed
+        if order_by is None
+        else indexed.sort(order_by, descending=descending, nulls_last=True)
     )
     kept = ordered.unique(subset=[key], keep="first", maintain_order=True)
     removed = ordered.join(kept.select("__row_id"), on="__row_id", how="anti")
