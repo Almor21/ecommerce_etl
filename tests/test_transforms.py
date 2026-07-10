@@ -99,3 +99,12 @@ def test_nullify_outside_range_low_and_high():
     out, n_out = T.nullify_outside_range(df, "score", low=1, high=5)
     assert out["score"].to_list() == [1, None, 5, None, 3, None]
     assert n_out == 2  # 0 and 6
+
+
+def test_nullify_not_in_set_nulls_invalid_and_captures():
+    """Values outside the allowed set are nulled; the original bad rows are returned."""
+    df = pl.DataFrame({"id": [1, 2, 3, 4], "category": ["sports", "sportss", None, "beauty"]})
+    out, rejected = T.nullify_not_in_set(df, "category", {"sports", "beauty"})
+    assert out["category"].to_list() == ["sports", None, None, "beauty"]  # typo -> null; real null stays
+    assert rejected["id"].to_list() == [2]                                # only the typo row captured
+    assert rejected["category"].to_list() == ["sportss"]                  # original value preserved

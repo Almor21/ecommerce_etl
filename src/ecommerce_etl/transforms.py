@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 import polars as pl
 
@@ -70,6 +70,22 @@ def nullify_outside_range(
     )
     n_out = int(df.get_column("__out_of_range").sum())
     return df.drop("__out_of_range"), n_out
+
+
+def nullify_not_in_set(
+    df: pl.DataFrame, column: str, allowed: Collection[str]
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Null values not in `allowed`; returns (df, rejected).
+
+    The row is kept (only the bad value is nulled), and a copy of each bad row —
+    with its original value — is returned for audit. Genuine nulls are left as-is.
+    """
+    invalid = pl.col(column).is_not_null() & ~pl.col(column).is_in(list(allowed))
+    rejected = df.filter(invalid)  # original rows, before nulling, for the audit trail
+    df = df.with_columns(
+        pl.when(invalid).then(None).otherwise(pl.col(column)).alias(column)
+    )
+    return df, rejected
 
 
 def drop_null_keys(df: pl.DataFrame, key: str) -> tuple[pl.DataFrame, pl.DataFrame]:

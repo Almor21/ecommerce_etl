@@ -4,6 +4,8 @@ from datetime import datetime
 
 import pandera.polars as pa
 
+from .config import PRODUCT_CATEGORIES
+
 
 class CustomersSilver(pa.DataFrameModel):
     """Contract for the cleaned customers table."""
@@ -27,7 +29,7 @@ class ProductsSilver(pa.DataFrameModel):
 
     product_id: str = pa.Field(nullable=False, unique=True)
     product_name: str = pa.Field(nullable=True)
-    category: str = pa.Field(nullable=True)
+    category: str = pa.Field(nullable=True, isin=list(PRODUCT_CATEGORIES))
     price: float = pa.Field(nullable=True, ge=0)
     weight_kg: float = pa.Field(nullable=True, ge=0)
     source_file: str = pa.Field(alias="_source_file", nullable=False)
