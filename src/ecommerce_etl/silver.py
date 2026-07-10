@@ -38,6 +38,8 @@ ORDERS_STRING_COLUMNS = ["order_id", "customer_id", "status"]
 ORDERS_DESCRIPTIVE = ["status", "order_date", "approved_at", "delivered_at"]
 ORDER_ITEMS_STRING_COLUMNS = ["item_id", "order_id", "product_id"]
 ORDER_ITEMS_DESCRIPTIVE = ["quantity", "unit_price", "freight_value"]
+PAYMENTS_STRING_COLUMNS = ["payment_id", "order_id", "payment_type"]
+PAYMENTS_DESCRIPTIVE = ["payment_type", "installments", "amount"]
 
 
 def _quarantine(*frames_with_reason: tuple[pl.DataFrame, str]) -> pl.DataFrame:
@@ -244,4 +246,60 @@ def run_order_items() -> pl.DataFrame:
     io.write_parquet(silver, config.SILVER_DIR / "order_items.parquet")
     io.write_parquet(rejected, config.QUARANTINE_DIR / "order_items.parquet")
     io.write_parquet(report.to_frame(), config.QUALITY_DIR / "order_items.parquet")
+    return silver
+
+
+def clean_payments(
+    df: pl.DataFrame, valid_order_ids: Collection[str]
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int]]:
+    """Clean the payments table to Silver; returns (silver, rejected, metrics)."""
+    df = strip_strings(df, PAYMENTS_STRING_COLUMNS)
+    df = lowercase(df, "payment_type")
+    df, cast_installments = cast_int(df, "installments")
+    df, cast_amount = cast_float(df, "amount")
+    df, rejected_type = nullify_not_in_set(df, "payment_type", config.PAYMENT_TYPES)
+    df, rejected_amount = split_outside_range(df, "amount", low=0)
+    df, rejected_orphan = split_orphans(df, "order_id", valid_order_ids)
+    df, rejected_null = drop_null_keys(df, "payment_id")
+    df, rejected_dup = deduplicate_by_key(df, "payment_id")
+    rejected = _quarantine(
+        (rejected_type, "invalid_payment_type"),
+        (rejected_amount, "invalid_amount"),
+        (rejected_orphan, "orphan_order"),
+        (rejected_null, "null_payment_id"),
+        (rejected_dup, "duplicate_payment_id"),
+    )
+    metrics = {
+        "cast_installments": cast_installments,
+        "cast_amount": cast_amount,
+        "invalid_payment_type": rejected_type.height,
+        "invalid_amount": rejected_amount.height,
+        "orphan_order": rejected_orphan.height,
+        "null_payment_id": rejected_null.height,
+        "duplicate_payment_id": rejected_dup.height,
+    }
+    return df, rejected, metrics
+
+
+def run_payments() -> pl.DataFrame:
+    """Build payments Silver from Bronze; write silver, quarantine and quality."""
+    bronze = io.read_parquet(config.BRONZE_DIR / "payments.parquet")
+    valid_order_ids = io.read_parquet(config.SILVER_DIR / "orders.parquet")["order_id"]
+    silver, rejected, m = clean_payments(bronze, valid_order_ids)
+    schemas.PaymentsSilver.validate(silver, lazy=True)
+
+    report = QualityReport()
+    report.null_counts(bronze, "payments", PAYMENTS_DESCRIPTIVE, "bronze")
+    report.record("null_check", "payments", "payment_id", bronze.height, m["null_payment_id"], "bronze")
+    report.record("duplicate_check", "payments", "payment_id", bronze.height, m["duplicate_payment_id"], "bronze")
+    report.record("cast_check", "payments", "installments", bronze.height, m["cast_installments"], "silver")
+    report.record("cast_check", "payments", "amount", bronze.height, m["cast_amount"], "silver")
+    report.record("accepted_values", "payments", "payment_type", bronze.height, m["invalid_payment_type"], "silver")
+    report.record("range_check", "payments", "amount", bronze.height, m["invalid_amount"], "silver")
+    report.record("referential_integrity", "payments", "order_id", bronze.height, m["orphan_order"], "silver")
+    report.row_count("payments", bronze.height, silver.height, "silver")
+
+    io.write_parquet(silver, config.SILVER_DIR / "payments.parquet")
+    io.write_parquet(rejected, config.QUARANTINE_DIR / "payments.parquet")
+    io.write_parquet(report.to_frame(), config.QUALITY_DIR / "payments.parquet")
     return silver
