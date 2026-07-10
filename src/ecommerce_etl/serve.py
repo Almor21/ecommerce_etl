@@ -16,6 +16,7 @@ def _load(con: duckdb.DuckDBPyConnection, table: str, source: str | Path) -> Non
 
 def run() -> None:
     """Rebuild warehouse.duckdb with one schema per medallion concern."""
+    # Full rebuild: drop the whole file so no stale/orphan tables survive across runs.
     config.WAREHOUSE_DB.unlink(missing_ok=True)
     con = duckdb.connect(str(config.WAREHOUSE_DB))
     try:

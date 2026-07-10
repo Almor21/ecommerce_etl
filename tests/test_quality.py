@@ -24,7 +24,7 @@ def test_duplicate_check_counts_duplicate_keys():
     report.duplicate_check(df, "customers", "customer_id", "bronze")
     row = report.to_frame().row(0, named=True)
     assert row["records_checked"] == 5
-    assert row["records_failed"] == 2  # 5 filas - 3 ids únicos
+    assert row["records_failed"] == 2  # 5 rows - 3 unique ids
 
 
 def test_row_count_records_dropped_rows():

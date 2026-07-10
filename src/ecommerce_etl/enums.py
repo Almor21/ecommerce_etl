@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 
 
-# Categorías válidas de products, usadas por el accepted_values check.
+# Valid product categories, used by the accepted_values check.
 class ProductCategory(StrEnum):
     AUTOMOTIVE = "automotive"
     BEAUTY = "beauty"
@@ -22,8 +22,8 @@ class ProductCategory(StrEnum):
     TOYS = "toys"
 
 
-# Estados válidos del ciclo de vida de un pedido.
-# "unknown" y los blancos NO están aquí a propósito: se normalizan a null.
+# Valid order lifecycle statuses.
+# "unknown" and blanks are deliberately absent here: they get normalized to null.
 class OrderStatus(StrEnum):
     DELIVERED = "delivered"
     SHIPPED = "shipped"
@@ -32,7 +32,7 @@ class OrderStatus(StrEnum):
     RETURNED = "returned"
 
 
-# Métodos de pago válidos
+# Valid payment types.
 class PaymentType(StrEnum):
     CREDIT_CARD = "credit_card"
     BOLETO = "boleto"

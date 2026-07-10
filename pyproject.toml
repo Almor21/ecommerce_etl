@@ -1,7 +1,7 @@
 [project]
 name = "ecommerce-etl"
 version = "0.1.0"
-description = "ETL medallion (Bronze/Silver/Gold) para un dataset de e-commerce brasileño"
+description = "Medallion ETL (Bronze/Silver/Gold) for a Brazilian e-commerce dataset"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
