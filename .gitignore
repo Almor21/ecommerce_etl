@@ -8,5 +8,12 @@ __pycache__/
 build/
 dist/
 
+# outputs
+data/bronze/
+data/silver/
+data/gold/
+data/quarantine/
+warehouse.duckdb
+
 # Jupyter
 .ipynb_checkpoints/
