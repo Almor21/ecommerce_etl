@@ -77,22 +77,25 @@ def test_deduplicate_by_key_without_order_keeps_first():
 
 
 def test_cast_float_permissive():
-    """Numeric text becomes float; non-numeric text becomes null."""
+    """Numeric text becomes float, non-numeric becomes null, and the fail count is returned."""
     df = pl.DataFrame({"price": ["10.5", "-3", "abc", None]})
-    out = T.cast_float(df, "price")
+    out, n_failed = T.cast_float(df, "price")
     assert out.schema["price"] == pl.Float64
     assert out["price"].to_list() == [10.5, -3.0, None, None]
+    assert n_failed == 1  # only "abc" (the null was already null, not a cast failure)
 
 
 def test_nullify_outside_range_low_bound():
-    """Values below the low bound become null; valid values and nulls are kept."""
+    """Values below the low bound become null; returns how many were nulled."""
     df = pl.DataFrame({"price": [10.0, -5.0, 0.0, None]})
-    out = T.nullify_outside_range(df, "price", low=0)
+    out, n_out = T.nullify_outside_range(df, "price", low=0)
     assert out["price"].to_list() == [10.0, None, 0.0, None]
+    assert n_out == 1
 
 
 def test_nullify_outside_range_low_and_high():
-    """Values outside the inclusive [low, high] range become null."""
+    """Values outside the inclusive [low, high] range become null; returns the count."""
     df = pl.DataFrame({"score": [1, 0, 5, 6, 3, None]})
-    out = T.nullify_outside_range(df, "score", low=1, high=5)
+    out, n_out = T.nullify_outside_range(df, "score", low=1, high=5)
     assert out["score"].to_list() == [1, None, 5, None, 3, None]
+    assert n_out == 2  # 0 and 6

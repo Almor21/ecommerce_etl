@@ -40,9 +40,15 @@ def parse_datetime(
     )
 
 
-def cast_float(df: pl.DataFrame, column: str) -> pl.DataFrame:
-    """Cast a text column to float; unparseable values become null."""
-    return df.with_columns(pl.col(column).cast(pl.Float64, strict=False).alias(column))
+def cast_float(df: pl.DataFrame, column: str) -> tuple[pl.DataFrame, int]:
+    """Cast a text column to float; returns (df, count of values that failed to cast)."""
+    casted = pl.col(column).cast(pl.Float64, strict=False)
+    df = df.with_columns(
+        casted.alias(column),
+        (pl.col(column).is_not_null() & casted.is_null()).alias("__cast_failed"),
+    )
+    n_failed = int(df.get_column("__cast_failed").sum())
+    return df.drop("__cast_failed"), n_failed
 
 
 def nullify_outside_range(
@@ -50,15 +56,20 @@ def nullify_outside_range(
     column: str,
     low: float | None = None,
     high: float | None = None,
-) -> pl.DataFrame:
-    """Set values outside the inclusive [low, high] range to null (keeps the row)."""
+) -> tuple[pl.DataFrame, int]:
+    """Null values outside the inclusive [low, high] range; returns (df, count nulled)."""
     col = pl.col(column)
     out_of_range = pl.lit(False)
     if low is not None:
         out_of_range = out_of_range | (col < low)
     if high is not None:
         out_of_range = out_of_range | (col > high)
-    return df.with_columns(pl.when(out_of_range).then(None).otherwise(col).alias(column))
+    df = df.with_columns(
+        pl.when(out_of_range).then(None).otherwise(col).alias(column),
+        out_of_range.fill_null(False).alias("__out_of_range"),
+    )
+    n_out = int(df.get_column("__out_of_range").sum())
+    return df.drop("__out_of_range"), n_out
 
 
 def drop_null_keys(df: pl.DataFrame, key: str) -> tuple[pl.DataFrame, pl.DataFrame]:
