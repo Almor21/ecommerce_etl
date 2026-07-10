@@ -40,6 +40,8 @@ ORDER_ITEMS_STRING_COLUMNS = ["item_id", "order_id", "product_id"]
 ORDER_ITEMS_DESCRIPTIVE = ["quantity", "unit_price", "freight_value"]
 PAYMENTS_STRING_COLUMNS = ["payment_id", "order_id", "payment_type"]
 PAYMENTS_DESCRIPTIVE = ["payment_type", "installments", "amount"]
+REVIEWS_STRING_COLUMNS = ["review_id", "order_id", "title", "comment"]
+REVIEWS_DESCRIPTIVE = ["score", "title", "comment"]
 
 
 def _quarantine(*frames_with_reason: tuple[pl.DataFrame, str]) -> pl.DataFrame:
@@ -302,4 +304,52 @@ def run_payments() -> pl.DataFrame:
     io.write_parquet(silver, config.SILVER_DIR / "payments.parquet")
     io.write_parquet(rejected, config.QUARANTINE_DIR / "payments.parquet")
     io.write_parquet(report.to_frame(), config.QUALITY_DIR / "payments.parquet")
+    return silver
+
+
+def clean_reviews(
+    df: pl.DataFrame, valid_order_ids: Collection[str]
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int]]:
+    """Clean the reviews table to Silver; returns (silver, rejected, metrics)."""
+    df = strip_strings(df, REVIEWS_STRING_COLUMNS)
+    df, cast_score = cast_int(df, "score")
+    df, invalid_score = nullify_outside_range(df, "score", low=1, high=5)
+    df = parse_datetime(df, "created_at")
+    df, rejected_orphan = split_orphans(df, "order_id", valid_order_ids)
+    df, rejected_null = drop_null_keys(df, "review_id")
+    df, rejected_dup = deduplicate_by_key(df, "review_id", "created_at")
+    rejected = _quarantine(
+        (rejected_orphan, "orphan_order"),
+        (rejected_null, "null_review_id"),
+        (rejected_dup, "duplicate_review_id"),
+    )
+    metrics = {
+        "cast_score": cast_score,
+        "invalid_score": invalid_score,
+        "orphan_order": rejected_orphan.height,
+        "null_review_id": rejected_null.height,
+        "duplicate_review_id": rejected_dup.height,
+    }
+    return df, rejected, metrics
+
+
+def run_reviews() -> pl.DataFrame:
+    """Build reviews Silver from Bronze; write silver, quarantine and quality."""
+    bronze = io.read_parquet(config.BRONZE_DIR / "reviews.parquet")
+    valid_order_ids = io.read_parquet(config.SILVER_DIR / "orders.parquet")["order_id"]
+    silver, rejected, m = clean_reviews(bronze, valid_order_ids)
+    schemas.ReviewsSilver.validate(silver, lazy=True)
+
+    report = QualityReport()
+    report.null_counts(bronze, "reviews", REVIEWS_DESCRIPTIVE, "bronze")
+    report.record("null_check", "reviews", "review_id", bronze.height, m["null_review_id"], "bronze")
+    report.record("duplicate_check", "reviews", "review_id", bronze.height, m["duplicate_review_id"], "bronze")
+    report.record("cast_check", "reviews", "score", bronze.height, m["cast_score"], "silver")
+    report.record("range_check", "reviews", "score", bronze.height, m["invalid_score"], "silver")
+    report.record("referential_integrity", "reviews", "order_id", bronze.height, m["orphan_order"], "silver")
+    report.row_count("reviews", bronze.height, silver.height, "silver")
+
+    io.write_parquet(silver, config.SILVER_DIR / "reviews.parquet")
+    io.write_parquet(rejected, config.QUARANTINE_DIR / "reviews.parquet")
+    io.write_parquet(report.to_frame(), config.QUALITY_DIR / "reviews.parquet")
     return silver
