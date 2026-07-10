@@ -102,12 +102,9 @@ def split_outside_range(
 def nullify_not_in_set(
     df: pl.DataFrame, column: str, allowed: Collection[str]
 ) -> tuple[pl.DataFrame, pl.DataFrame]:
-    """Null values not in `allowed`; returns (df, rejected).
-
-    The row is kept (only the bad value is nulled), and a copy of each bad row —
-    with its original value — is returned for audit. Genuine nulls are left as-is.
-    """
-    invalid = pl.col(column).is_not_null() & ~pl.col(column).is_in(list(allowed))
+    """Null values not in `allowed`; returns (df, rejected)."""
+    allowed_values = [str(v) for v in allowed]
+    invalid = pl.col(column).is_not_null() & ~pl.col(column).is_in(allowed_values)
     rejected = df.filter(invalid)  # original rows, before nulling, for the audit trail
     df = df.with_columns(
         pl.when(invalid).then(None).otherwise(pl.col(column)).alias(column)

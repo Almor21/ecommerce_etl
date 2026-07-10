@@ -1,19 +1,10 @@
-"""Silver layer: clean and validate Bronze tables, capturing quality and quarantine.
-
-Per-table cleaning composes the generic primitives from `transforms`. The value
-transforms return the metric they produced (e.g. how many values failed to cast),
-so the quality checks reuse those counts instead of scanning the data again. The
-"did the cleaning work?" verification is the Pandera contract's job (it raises),
-not the quality table's.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Collection
 
 import polars as pl
 
-from . import config, io, schemas
+from . import config, enums, io, schemas
 from .quality import QualityReport
 from .transforms import (
     cast_float,
@@ -80,7 +71,7 @@ def clean_products(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, dict[s
     df, cast_price = cast_float(df, "price")
     df, cast_weight = cast_float(df, "weight_kg")
     df, neg_price = nullify_outside_range(df, "price", low=0)
-    df, rejected_cat = nullify_not_in_set(df, "category", config.PRODUCT_CATEGORIES)
+    df, rejected_cat = nullify_not_in_set(df, "category", enums.ProductCategory)
     df, rejected_null = drop_null_keys(df, "product_id")
     df, rejected_dup = deduplicate_by_key(df, "product_id")
     rejected = _quarantine(
@@ -148,7 +139,7 @@ def clean_orders(
     df = parse_datetime(df, "order_date")
     df = parse_datetime(df, "approved_at")
     df = parse_datetime(df, "delivered_at")
-    df, rejected_status = nullify_not_in_set(df, "status", config.ORDER_STATUSES)
+    df, rejected_status = nullify_not_in_set(df, "status", enums.OrderStatus)
     df, rejected_orphan = split_orphans(df, "customer_id", valid_customer_ids)
     df, rejected_null = drop_null_keys(df, "order_id")
     df, rejected_dup = deduplicate_by_key(df, "order_id", "order_date")
@@ -259,7 +250,7 @@ def clean_payments(
     df = lowercase(df, "payment_type")
     df, cast_installments = cast_int(df, "installments")
     df, cast_amount = cast_float(df, "amount")
-    df, rejected_type = nullify_not_in_set(df, "payment_type", config.PAYMENT_TYPES)
+    df, rejected_type = nullify_not_in_set(df, "payment_type", enums.PaymentType)
     df, rejected_amount = split_outside_range(df, "amount", low=0)
     df, rejected_orphan = split_orphans(df, "order_id", valid_order_ids)
     df, rejected_null = drop_null_keys(df, "payment_id")

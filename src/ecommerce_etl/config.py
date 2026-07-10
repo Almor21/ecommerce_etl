@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -13,29 +12,10 @@ GOLD_DIR = DATA_DIR / "gold"
 QUARANTINE_DIR = DATA_DIR / "quarantine"
 QUALITY_DIR = DATA_DIR / "quality"
 
-WAREHOUSE_DB = PROJECT_ROOT / "warehouse.duckdb"
+WAREHOUSE_DB = DATA_DIR / "warehouse.duckdb"
 
 DEFAULT_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-# Categorías válidas de products, usadas por el accepted_values check.
-# SUPOSICIÓN: esta lista se derivó explorando el dataset (ver notebook), porque es
-# pequeño y fijo, así que se pueden enumerar todas fácilmente.
-PRODUCT_CATEGORIES: frozenset[str] = frozenset({
-    "automotive", "beauty", "books", "clothing", "electronics", "food",
-    "furniture", "garden", "health", "home_appliances", "music",
-    "office_supplies", "pet_shop", "sports", "toys",
-})
-
-# Estados válidos del ciclo de vida de un pedido (orders.status).
-# SUPOSICIÓN: derivados de explorar el dataset (ver notebook). "unknown" y los
-# blancos NO están aquí a propósito: se normalizan a null (= "sin estado conocido").
-ORDER_STATUSES: frozenset[str] = frozenset({
-    "delivered", "shipped", "processing", "canceled", "returned",
-})
-
-# Métodos de pago válidos (payments.payment_type), tras normalizar a minúsculas.
-# SUPOSICIÓN: derivados de explorar el dataset (ver notebook). "PIX" -> "pix" (válido);
-# "bitcoin"/"cash" y los blancos NO están: se normalizan a null.
-PAYMENT_TYPES: frozenset[str] = frozenset({
-    "credit_card", "boleto", "voucher", "debit_card", "pix",
-})
+TABLES: tuple[str, ...] = (
+    "customers", "products", "orders", "order_items", "payments", "reviews",
+)

@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pandera.polars as pa
 
-from .config import ORDER_STATUSES, PAYMENT_TYPES, PRODUCT_CATEGORIES
+from .enums import OrderStatus, PaymentType, ProductCategory
 
 
 class CustomersSilver(pa.DataFrameModel):
@@ -29,7 +29,7 @@ class ProductsSilver(pa.DataFrameModel):
 
     product_id: str = pa.Field(nullable=False, unique=True)
     product_name: str = pa.Field(nullable=True)
-    category: str = pa.Field(nullable=True, isin=list(PRODUCT_CATEGORIES))
+    category: str = pa.Field(nullable=True, isin=list(ProductCategory))
     price: float = pa.Field(nullable=True, ge=0)
     weight_kg: float = pa.Field(nullable=True, ge=0)
     source_file: str = pa.Field(alias="_source_file", nullable=False)
@@ -45,7 +45,7 @@ class OrdersSilver(pa.DataFrameModel):
 
     order_id: str = pa.Field(nullable=False, unique=True)
     customer_id: str = pa.Field(nullable=False)
-    status: str = pa.Field(nullable=True, isin=list(ORDER_STATUSES))
+    status: str = pa.Field(nullable=True, isin=list(OrderStatus))
     order_date: datetime = pa.Field(nullable=True)
     approved_at: datetime = pa.Field(nullable=True)
     delivered_at: datetime = pa.Field(nullable=True)
@@ -79,7 +79,7 @@ class PaymentsSilver(pa.DataFrameModel):
 
     payment_id: str = pa.Field(nullable=False, unique=True)
     order_id: str = pa.Field(nullable=False)
-    payment_type: str = pa.Field(nullable=True, isin=list(PAYMENT_TYPES))
+    payment_type: str = pa.Field(nullable=True, isin=list(PaymentType))
     installments: int = pa.Field(nullable=True)
     amount: float = pa.Field(nullable=False, ge=0)
     source_file: str = pa.Field(alias="_source_file", nullable=False)
