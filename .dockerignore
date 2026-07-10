@@ -1,0 +1,17 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+*.egg-info/
+
+data/bronze/
+data/silver/
+data/gold/
+data/quarantine/
+data/quality/
+data/warehouse.duckdb
+warehouse.duckdb
+
+*.ipynb
+.ipynb_checkpoints/
+exercise/

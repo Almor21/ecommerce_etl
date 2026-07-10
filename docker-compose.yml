@@ -1,0 +1,6 @@
+services:
+  etl:
+    build: .
+    container_name: ecommerce-etl
+    volumes:
+      - ./data:/app/data
