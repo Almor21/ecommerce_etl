@@ -4,6 +4,9 @@ install:
 test:
 	uv run pytest -q
 
+requirements:
+	uv export --no-dev --no-emit-project --no-annotate -o requirements.txt
+
 run:
 	uv run etl
 
