@@ -16,3 +16,12 @@ QUALITY_DIR = DATA_DIR / "quality"
 WAREHOUSE_DB = PROJECT_ROOT / "warehouse.duckdb"
 
 DEFAULT_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+# Categorías válidas de products, usadas por el accepted_values check.
+# SUPOSICIÓN: esta lista se derivó explorando el dataset (ver notebook), porque es
+# pequeño y fijo, así que se pueden enumerar todas fácilmente.
+PRODUCT_CATEGORIES: frozenset[str] = frozenset({
+    "automotive", "beauty", "books", "clothing", "electronics", "food",
+    "furniture", "garden", "health", "home_appliances", "music",
+    "office_supplies", "pet_shop", "sports", "toys",
+})
