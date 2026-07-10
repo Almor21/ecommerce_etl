@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 import polars as pl
@@ -37,6 +38,18 @@ class QualityReport:
     def null_check(self, df: pl.DataFrame, table: str, column: str, stage: str) -> None:
         """Record how many nulls a column has."""
         self.record("null_check", table, column, df.height, df[column].null_count(), stage)
+
+    def null_counts(
+        self, df: pl.DataFrame, table: str, columns: Sequence[str], stage: str
+    ) -> None:
+        """Record null counts for several columns in a single (lazy) pass."""
+        counts = (
+            df.lazy()
+            .select([pl.col(col).null_count().alias(col) for col in columns])
+            .collect()
+        )
+        for col in columns:
+            self.record("null_check", table, col, df.height, int(counts[col][0]), stage)
 
     def duplicate_check(self, df: pl.DataFrame, table: str, key: str, stage: str) -> None:
         """Record how many duplicate keys a table has."""
