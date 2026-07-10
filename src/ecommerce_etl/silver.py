@@ -9,6 +9,8 @@ not the quality table's.
 
 from __future__ import annotations
 
+from collections.abc import Collection
+
 import polars as pl
 
 from . import config, io, schemas
@@ -21,6 +23,7 @@ from .transforms import (
     nullify_not_in_set,
     nullify_outside_range,
     parse_datetime,
+    split_orphans,
     strip_strings,
     uppercase,
 )
@@ -29,6 +32,8 @@ CUSTOMERS_STRING_COLUMNS = ["customer_id", "customer_name", "email", "city", "st
 CUSTOMERS_DESCRIPTIVE = ["customer_name", "email", "city", "state"]
 PRODUCTS_STRING_COLUMNS = ["product_id", "product_name", "category"]
 PRODUCTS_DESCRIPTIVE = ["product_name", "category", "price", "weight_kg"]
+ORDERS_STRING_COLUMNS = ["order_id", "customer_id", "status"]
+ORDERS_DESCRIPTIVE = ["status", "order_date", "approved_at", "delivered_at"]
 
 
 def _quarantine(*frames_with_reason: tuple[pl.DataFrame, str]) -> pl.DataFrame:
@@ -123,4 +128,53 @@ def run_products() -> pl.DataFrame:
     io.write_parquet(silver, config.SILVER_DIR / "products.parquet")
     io.write_parquet(rejected, config.QUARANTINE_DIR / "products.parquet")
     io.write_parquet(report.to_frame(), config.QUALITY_DIR / "products.parquet")
+    return silver
+
+
+def clean_orders(
+    df: pl.DataFrame, valid_customer_ids: Collection[str]
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int]]:
+    """Clean the orders table to Silver; returns (silver, rejected, metrics)."""
+    df = strip_strings(df, ORDERS_STRING_COLUMNS)
+    df = lowercase(df, "status")
+    df = parse_datetime(df, "order_date")
+    df = parse_datetime(df, "approved_at")
+    df = parse_datetime(df, "delivered_at")
+    df, rejected_status = nullify_not_in_set(df, "status", config.ORDER_STATUSES)
+    df, rejected_orphan = split_orphans(df, "customer_id", valid_customer_ids)
+    df, rejected_null = drop_null_keys(df, "order_id")
+    df, rejected_dup = deduplicate_by_key(df, "order_id", "order_date")
+    rejected = _quarantine(
+        (rejected_status, "invalid_status"),
+        (rejected_orphan, "orphan_customer"),
+        (rejected_null, "null_order_id"),
+        (rejected_dup, "duplicate_order_id"),
+    )
+    metrics = {
+        "invalid_status": rejected_status.height,
+        "orphan_customer": rejected_orphan.height,
+        "null_order_id": rejected_null.height,
+        "duplicate_order_id": rejected_dup.height,
+    }
+    return df, rejected, metrics
+
+
+def run_orders() -> pl.DataFrame:
+    """Build orders Silver from Bronze; write silver, quarantine and quality."""
+    bronze = io.read_parquet(config.BRONZE_DIR / "orders.parquet")
+    valid_customer_ids = io.read_parquet(config.SILVER_DIR / "customers.parquet")["customer_id"]
+    silver, rejected, m = clean_orders(bronze, valid_customer_ids)
+    schemas.OrdersSilver.validate(silver, lazy=True)
+
+    report = QualityReport()
+    report.null_counts(bronze, "orders", ORDERS_DESCRIPTIVE, "bronze")
+    report.record("null_check", "orders", "order_id", bronze.height, m["null_order_id"], "bronze")
+    report.record("duplicate_check", "orders", "order_id", bronze.height, m["duplicate_order_id"], "bronze")
+    report.record("accepted_values", "orders", "status", bronze.height, m["invalid_status"], "silver")
+    report.record("referential_integrity", "orders", "customer_id", bronze.height, m["orphan_customer"], "silver")
+    report.row_count("orders", bronze.height, silver.height, "silver")
+
+    io.write_parquet(silver, config.SILVER_DIR / "orders.parquet")
+    io.write_parquet(rejected, config.QUARANTINE_DIR / "orders.parquet")
+    io.write_parquet(report.to_frame(), config.QUALITY_DIR / "orders.parquet")
     return silver
