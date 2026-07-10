@@ -51,6 +51,17 @@ def cast_float(df: pl.DataFrame, column: str) -> tuple[pl.DataFrame, int]:
     return df.drop("__cast_failed"), n_failed
 
 
+def cast_int(df: pl.DataFrame, column: str) -> tuple[pl.DataFrame, int]:
+    """Cast a text column to integer; returns (df, count of values that failed to cast)."""
+    casted = pl.col(column).cast(pl.Int64, strict=False)
+    df = df.with_columns(
+        casted.alias(column),
+        (pl.col(column).is_not_null() & casted.is_null()).alias("__cast_failed"),
+    )
+    n_failed = int(df.get_column("__cast_failed").sum())
+    return df.drop("__cast_failed"), n_failed
+
+
 def nullify_outside_range(
     df: pl.DataFrame,
     column: str,
@@ -70,6 +81,22 @@ def nullify_outside_range(
     )
     n_out = int(df.get_column("__out_of_range").sum())
     return df.drop("__out_of_range"), n_out
+
+
+def split_outside_range(
+    df: pl.DataFrame,
+    column: str,
+    low: float | None = None,
+    high: float | None = None,
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Split rows by a numeric range: (within [low, high], outside). Nulls are kept."""
+    out_of_range = pl.lit(False)
+    if low is not None:
+        out_of_range = out_of_range | (pl.col(column) < low)
+    if high is not None:
+        out_of_range = out_of_range | (pl.col(column) > high)
+    out_of_range = out_of_range.fill_null(False)
+    return df.filter(~out_of_range), df.filter(out_of_range)
 
 
 def nullify_not_in_set(

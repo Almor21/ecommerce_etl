@@ -117,3 +117,20 @@ def test_split_orphans_separates_missing_fk():
     assert kept["order_id"].to_list() == ["O1", "O3", "O4"]  # C1 valid, null kept, C2 valid
     assert orphans["order_id"].to_list() == ["O2"]           # C9 not in valid_keys
     assert orphans["customer_id"].to_list() == ["C9"]
+
+
+def test_cast_int_permissive():
+    """Integer text becomes int, non-integer becomes null, and the fail count is returned."""
+    df = pl.DataFrame({"quantity": ["5", "-3", "abc", None]})
+    out, n_failed = T.cast_int(df, "quantity")
+    assert out.schema["quantity"] == pl.Int64
+    assert out["quantity"].to_list() == [5, -3, None, None]
+    assert n_failed == 1  # only "abc"
+
+
+def test_split_outside_range_removes_out_of_range_keeps_nulls():
+    """Rows outside [low, high] are separated out; nulls are kept."""
+    df = pl.DataFrame({"item_id": ["I1", "I2", "I3", "I4", "I5"], "quantity": [5, 0, -3, 1, None]})
+    kept, rejected = T.split_outside_range(df, "quantity", low=1)
+    assert kept["item_id"].to_list() == ["I1", "I4", "I5"]  # 5, 1 (>=1), null kept
+    assert rejected["item_id"].to_list() == ["I2", "I3"]    # 0 and -3 (< 1)
