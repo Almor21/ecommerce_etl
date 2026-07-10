@@ -17,6 +17,7 @@ from . import config, io, schemas
 from .quality import QualityReport
 from .transforms import (
     cast_float,
+    cast_int,
     deduplicate_by_key,
     drop_null_keys,
     lowercase,
@@ -24,6 +25,7 @@ from .transforms import (
     nullify_outside_range,
     parse_datetime,
     split_orphans,
+    split_outside_range,
     strip_strings,
     uppercase,
 )
@@ -34,6 +36,8 @@ PRODUCTS_STRING_COLUMNS = ["product_id", "product_name", "category"]
 PRODUCTS_DESCRIPTIVE = ["product_name", "category", "price", "weight_kg"]
 ORDERS_STRING_COLUMNS = ["order_id", "customer_id", "status"]
 ORDERS_DESCRIPTIVE = ["status", "order_date", "approved_at", "delivered_at"]
+ORDER_ITEMS_STRING_COLUMNS = ["item_id", "order_id", "product_id"]
+ORDER_ITEMS_DESCRIPTIVE = ["quantity", "unit_price", "freight_value"]
 
 
 def _quarantine(*frames_with_reason: tuple[pl.DataFrame, str]) -> pl.DataFrame:
@@ -177,4 +181,67 @@ def run_orders() -> pl.DataFrame:
     io.write_parquet(silver, config.SILVER_DIR / "orders.parquet")
     io.write_parquet(rejected, config.QUARANTINE_DIR / "orders.parquet")
     io.write_parquet(report.to_frame(), config.QUALITY_DIR / "orders.parquet")
+    return silver
+
+
+def clean_order_items(
+    df: pl.DataFrame,
+    valid_order_ids: Collection[str],
+    valid_product_ids: Collection[str],
+) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int]]:
+    """Clean the order_items table to Silver; returns (silver, rejected, metrics)."""
+    df = strip_strings(df, ORDER_ITEMS_STRING_COLUMNS)
+    df, cast_qty = cast_int(df, "quantity")
+    df, cast_price = cast_float(df, "unit_price")
+    df, cast_freight = cast_float(df, "freight_value")
+    df, rejected_qty = split_outside_range(df, "quantity", low=1)
+    df, rejected_price = drop_null_keys(df, "unit_price")
+    df, rejected_order = split_orphans(df, "order_id", valid_order_ids)
+    df, rejected_product = split_orphans(df, "product_id", valid_product_ids)
+    df, rejected_null = drop_null_keys(df, "item_id")
+    df, rejected_dup = deduplicate_by_key(df, "item_id")
+    rejected = _quarantine(
+        (rejected_qty, "invalid_quantity"),
+        (rejected_price, "null_unit_price"),
+        (rejected_order, "orphan_order"),
+        (rejected_product, "orphan_product"),
+        (rejected_null, "null_item_id"),
+        (rejected_dup, "duplicate_item_id"),
+    )
+    metrics = {
+        "cast_quantity": cast_qty,
+        "cast_unit_price": cast_price,
+        "cast_freight_value": cast_freight,
+        "invalid_quantity": rejected_qty.height,
+        "orphan_order": rejected_order.height,
+        "orphan_product": rejected_product.height,
+        "null_item_id": rejected_null.height,
+        "duplicate_item_id": rejected_dup.height,
+    }
+    return df, rejected, metrics
+
+
+def run_order_items() -> pl.DataFrame:
+    """Build order_items Silver from Bronze; write silver, quarantine and quality."""
+    bronze = io.read_parquet(config.BRONZE_DIR / "order_items.parquet")
+    valid_order_ids = io.read_parquet(config.SILVER_DIR / "orders.parquet")["order_id"]
+    valid_product_ids = io.read_parquet(config.SILVER_DIR / "products.parquet")["product_id"]
+    silver, rejected, m = clean_order_items(bronze, valid_order_ids, valid_product_ids)
+    schemas.OrderItemsSilver.validate(silver, lazy=True)
+
+    report = QualityReport()
+    report.null_counts(bronze, "order_items", ORDER_ITEMS_DESCRIPTIVE, "bronze")
+    report.record("null_check", "order_items", "item_id", bronze.height, m["null_item_id"], "bronze")
+    report.record("duplicate_check", "order_items", "item_id", bronze.height, m["duplicate_item_id"], "bronze")
+    report.record("cast_check", "order_items", "quantity", bronze.height, m["cast_quantity"], "silver")
+    report.record("cast_check", "order_items", "unit_price", bronze.height, m["cast_unit_price"], "silver")
+    report.record("cast_check", "order_items", "freight_value", bronze.height, m["cast_freight_value"], "silver")
+    report.record("range_check", "order_items", "quantity", bronze.height, m["invalid_quantity"], "silver")
+    report.record("referential_integrity", "order_items", "order_id", bronze.height, m["orphan_order"], "silver")
+    report.record("referential_integrity", "order_items", "product_id", bronze.height, m["orphan_product"], "silver")
+    report.row_count("order_items", bronze.height, silver.height, "silver")
+
+    io.write_parquet(silver, config.SILVER_DIR / "order_items.parquet")
+    io.write_parquet(rejected, config.QUARANTINE_DIR / "order_items.parquet")
+    io.write_parquet(report.to_frame(), config.QUALITY_DIR / "order_items.parquet")
     return silver

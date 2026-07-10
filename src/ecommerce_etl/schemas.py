@@ -55,3 +55,20 @@ class OrdersSilver(pa.DataFrameModel):
     class Config:
         coerce = False
         strict = True
+
+
+class OrderItemsSilver(pa.DataFrameModel):
+    """Contract for the cleaned order_items table."""
+
+    item_id: str = pa.Field(nullable=False, unique=True)
+    order_id: str = pa.Field(nullable=False)  # FK to orders
+    product_id: str = pa.Field(nullable=False)  # FK to products
+    quantity: int = pa.Field(nullable=False, gt=0)
+    unit_price: float = pa.Field(nullable=False, ge=0)
+    freight_value: float = pa.Field(nullable=True, ge=0)
+    source_file: str = pa.Field(alias="_source_file", nullable=False)
+    ingested_at: datetime = pa.Field(alias="_ingested_at", nullable=False)
+
+    class Config:
+        coerce = False
+        strict = True
