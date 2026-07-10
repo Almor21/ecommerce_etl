@@ -25,3 +25,10 @@ PRODUCT_CATEGORIES: frozenset[str] = frozenset({
     "furniture", "garden", "health", "home_appliances", "music",
     "office_supplies", "pet_shop", "sports", "toys",
 })
+
+# Estados válidos del ciclo de vida de un pedido (orders.status).
+# SUPOSICIÓN: derivados de explorar el dataset (ver notebook). "unknown" y los
+# blancos NO están aquí a propósito: se normalizan a null (= "sin estado conocido").
+ORDER_STATUSES: frozenset[str] = frozenset({
+    "delivered", "shipped", "processing", "canceled", "returned",
+})
