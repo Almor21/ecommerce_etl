@@ -13,6 +13,7 @@ data/bronze/
 data/silver/
 data/gold/
 data/quarantine/
+data/quality/
 warehouse.duckdb
 
 # Jupyter
