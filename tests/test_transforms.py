@@ -108,3 +108,12 @@ def test_nullify_not_in_set_nulls_invalid_and_captures():
     assert out["category"].to_list() == ["sports", None, None, "beauty"]  # typo -> null; real null stays
     assert rejected["id"].to_list() == [2]                                # only the typo row captured
     assert rejected["category"].to_list() == ["sportss"]                  # original value preserved
+
+
+def test_split_orphans_separates_missing_fk():
+    """Rows whose FK is absent from valid_keys are orphans; null FKs are kept."""
+    df = pl.DataFrame({"order_id": ["O1", "O2", "O3", "O4"], "customer_id": ["C1", "C9", None, "C2"]})
+    kept, orphans = T.split_orphans(df, "customer_id", ["C1", "C2", "C3"])
+    assert kept["order_id"].to_list() == ["O1", "O3", "O4"]  # C1 valid, null kept, C2 valid
+    assert orphans["order_id"].to_list() == ["O2"]           # C9 not in valid_keys
+    assert orphans["customer_id"].to_list() == ["C9"]

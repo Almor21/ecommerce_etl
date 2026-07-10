@@ -88,6 +88,17 @@ def nullify_not_in_set(
     return df, rejected
 
 
+def split_orphans(
+    df: pl.DataFrame, fk_column: str, valid_keys: Collection[str]
+) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """Split rows by referential integrity: (fk present in valid_keys, orphans).
+
+    A null FK is kept — a missing reference is not a broken one.
+    """
+    is_orphan = pl.col(fk_column).is_not_null() & ~pl.col(fk_column).is_in(list(valid_keys))
+    return df.filter(~is_orphan), df.filter(is_orphan)
+
+
 def drop_null_keys(df: pl.DataFrame, key: str) -> tuple[pl.DataFrame, pl.DataFrame]:
     """Split rows on the primary key: (rows with key, rows missing key)."""
     kept = df.filter(pl.col(key).is_not_null())
