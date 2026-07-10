@@ -20,3 +20,19 @@ class CustomersSilver(pa.DataFrameModel):
     class Config:
         coerce = False
         strict = True
+
+
+class ProductsSilver(pa.DataFrameModel):
+    """Contract for the cleaned products table."""
+
+    product_id: str = pa.Field(nullable=False, unique=True)
+    product_name: str = pa.Field(nullable=True)
+    category: str = pa.Field(nullable=True)
+    price: float = pa.Field(nullable=True, ge=0)
+    weight_kg: float = pa.Field(nullable=True, ge=0)
+    source_file: str = pa.Field(alias="_source_file", nullable=False)
+    ingested_at: datetime = pa.Field(alias="_ingested_at", nullable=False)
+
+    class Config:
+        coerce = False
+        strict = True
