@@ -32,3 +32,10 @@ PRODUCT_CATEGORIES: frozenset[str] = frozenset({
 ORDER_STATUSES: frozenset[str] = frozenset({
     "delivered", "shipped", "processing", "canceled", "returned",
 })
+
+# Métodos de pago válidos (payments.payment_type), tras normalizar a minúsculas.
+# SUPOSICIÓN: derivados de explorar el dataset (ver notebook). "PIX" -> "pix" (válido);
+# "bitcoin"/"cash" y los blancos NO están: se normalizan a null.
+PAYMENT_TYPES: frozenset[str] = frozenset({
+    "credit_card", "boleto", "voucher", "debit_card", "pix",
+})
