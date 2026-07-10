@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
 
 import polars as pl
@@ -55,6 +55,15 @@ class QualityReport:
         """Record how many duplicate keys a table has."""
         failed = df.height - df[key].n_unique()
         self.record("duplicate_check", table, key, df.height, failed, stage)
+
+    def accepted_values_check(
+        self, df: pl.DataFrame, table: str, column: str, allowed: Collection[str], stage: str
+    ) -> None:
+        """Record non-null values that fall outside the allowed set."""
+        failed = df.filter(
+            pl.col(column).is_not_null() & ~pl.col(column).is_in(list(allowed))
+        ).height
+        self.record("accepted_values", table, column, df.height, failed, stage)
 
     def row_count(self, table: str, rows_in: int, rows_out: int, stage: str) -> None:
         """Record how many rows were dropped between two stages."""

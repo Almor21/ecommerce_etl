@@ -37,6 +37,17 @@ def test_row_count_records_dropped_rows():
     assert row["pct_failed"] == 0.9
 
 
+def test_accepted_values_check_counts_invalid():
+    """Counts non-null values outside the allowed set; nulls are not counted."""
+    df = pl.DataFrame({"category": ["sports", "bitcoin", None, "beauty"]})
+    report = QualityReport()
+    report.accepted_values_check(df, "products", "category", {"sports", "beauty"}, "silver")
+    row = report.to_frame().row(0, named=True)
+    assert row["check_name"] == "accepted_values"
+    assert row["records_checked"] == 4
+    assert row["records_failed"] == 1  # only "bitcoin"
+
+
 def test_pct_failed_is_zero_when_nothing_checked():
     """pct_failed is 0.0 (no division by zero) when checked is 0."""
     report = QualityReport()
