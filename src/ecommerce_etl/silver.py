@@ -18,6 +18,7 @@ from .transforms import (
     deduplicate_by_key,
     drop_null_keys,
     lowercase,
+    nullify_not_in_set,
     nullify_outside_range,
     parse_datetime,
     strip_strings,
@@ -62,18 +63,23 @@ def clean_customers(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, dict[
 def clean_products(df: pl.DataFrame) -> tuple[pl.DataFrame, pl.DataFrame, dict[str, int]]:
     """Clean the products table to Silver; returns (silver, rejected, metrics)."""
     df = strip_strings(df, PRODUCTS_STRING_COLUMNS)
+    df = lowercase(df, "category")
     df, cast_price = cast_float(df, "price")
     df, cast_weight = cast_float(df, "weight_kg")
     df, neg_price = nullify_outside_range(df, "price", low=0)
+    df, rejected_cat = nullify_not_in_set(df, "category", config.PRODUCT_CATEGORIES)
     df, rejected_null = drop_null_keys(df, "product_id")
     df, rejected_dup = deduplicate_by_key(df, "product_id")
     rejected = _quarantine(
-        (rejected_null, "null_product_id"), (rejected_dup, "duplicate_product_id")
+        (rejected_null, "null_product_id"),
+        (rejected_dup, "duplicate_product_id"),
+        (rejected_cat, "invalid_category"),
     )
     metrics = {
         "cast_price": cast_price,
         "cast_weight": cast_weight,
         "range_price": neg_price,
+        "invalid_category": rejected_cat.height,
         "null_product_id": rejected_null.height,
         "duplicate_product_id": rejected_dup.height,
     }
@@ -111,6 +117,7 @@ def run_products() -> pl.DataFrame:
     report.record("cast_check", "products", "price", bronze.height, m["cast_price"], "silver")
     report.record("cast_check", "products", "weight_kg", bronze.height, m["cast_weight"], "silver")
     report.record("range_check", "products", "price", bronze.height, m["range_price"], "silver")
+    report.record("accepted_values", "products", "category", bronze.height, m["invalid_category"], "silver")
     report.row_count("products", bronze.height, silver.height, "silver")
 
     io.write_parquet(silver, config.SILVER_DIR / "products.parquet")
